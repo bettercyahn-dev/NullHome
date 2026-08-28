@@ -1,0 +1,112 @@
+name: Build NullHome
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platforms;android-35" \
+            "build-tools;35.0.0"
+
+      - name: Compile Java
+        run: |
+          mkdir -p build/classes build/dex
+
+          javac \
+            -source 8 \
+            -target 8 \
+            -classpath "$ANDROID_HOME/platforms/android-35/android.jar" \
+            -d build/classes \
+            app/src/main/java/dev/nullhome/MainActivity.java
+
+      - name: DEX
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/d8" \
+            --release \
+            --min-api 26 \
+            --output build/dex \
+            build/classes/dev/nullhome/MainActivity.class
+
+      - name: Create APK
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" link \
+            -o build/base.apk \
+            -I "$ANDROID_HOME/platforms/android-35/android.jar" \
+            --manifest AndroidManifest.xml \
+            --min-sdk-version 26 \
+            --target-sdk-version 35
+
+          cd build/dex
+          zip -q -j ../base.apk classes.dex
+          cd ../..
+
+      - name: Align
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" \
+            -f \
+            -p \
+            4 \
+            build/base.apk \
+            build/aligned.apk
+
+      - name: Generate signing key
+        run: |
+          keytool \
+            -genkeypair \
+            -keystore build/nullhome.keystore \
+            -storepass nullhome \
+            -keypass nullhome \
+            -alias nullhome \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=NullHome"
+
+      - name: Sign
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks build/nullhome.keystore \
+            --ks-pass pass:nullhome \
+            --key-pass pass:nullhome \
+            --out build/NullHome.apk \
+            build/aligned.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
+            verify \
+            --verbose \
+            build/NullHome.apk
+
+      - name: Information
+        run: |
+          ls -lh build/NullHome.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
+            build/NullHome.apk | head -20
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NullHome
+          path: build/NullHome.apk
