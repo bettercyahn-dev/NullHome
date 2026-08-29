@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Report no display cutout geometry to framework consumers. -->
+    <string translatable="false" name="config_mainBuiltInDisplayCutout"></string>
+    <string translatable="false" name="config_mainBuiltInDisplayCutoutRectApproximation"></string>
+
+    <bool name="config_fillMainBuiltInDisplayCutout">false</bool>
+    <bool name="config_maskMainBuiltInDisplayCutout">false</bool>
+
+    <!-- Remove all waterfall safe-edge contributions. -->
+    <dimen name="waterfall_display_left_edge_size">0dp</dimen>
+    <dimen name="waterfall_display_top_edge_size">0dp</dimen>
+    <dimen name="waterfall_display_right_edge_size">0dp</dimen>
+    <dimen name="waterfall_display_bottom_edge_size">0dp</dimen>
+
+    <!-- Force framework status-bar geometry to zero in every orientation. -->
+    <dimen name="status_bar_height">0dp</dimen>
+    <dimen name="status_bar_height_portrait">0dp</dimen>
+    <dimen name="status_bar_height_landscape">0dp</dimen>
+
+    <!-- Remove the cutout/status-bar touch extension as well. -->
+    <dimen name="display_cutout_touchable_region_size">0dp</dimen>
+
+</resources>
