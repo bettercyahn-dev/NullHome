@@ -23,20 +23,6 @@
         android:supportsRtl="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
-        <service
-            android:name=".TopEdgeGuardService"
-            android:directBootAware="true"
-            android:enabled="true"
-            android:exported="true"
-            android:label="NullHome Top Edge Guard"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-
-        </service>
-
         <activity
             android:name=".RecentsBridgeActivity"
             android:exported="true"
