@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
@@ -30,7 +31,6 @@ public final class MainActivity extends Activity {
 
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
-
             WindowInsetsController c = w.getInsetsController();
 
             if (c != null) {
@@ -40,8 +40,7 @@ public final class MainActivity extends Activity {
                 );
 
                 c.setSystemBarsBehavior(
-                    WindowInsetsController
-                        .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 );
             }
         } else {
@@ -56,18 +55,26 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void openDrawer() {
-        Intent i = new Intent(this, DrawerActivity.class);
-
-        i.addFlags(
-            Intent.FLAG_ACTIVITY_NEW_TASK
-            | Intent.FLAG_ACTIVITY_NO_ANIMATION
-        );
-
+    private void openSettingsFallback() {
         try {
+            Intent settings = new Intent(Settings.ACTION_SETTINGS);
+            settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(settings);
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void openDrawer() {
+        try {
+            Intent i = new Intent(this, DrawerActivity.class);
+            i.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+                | Intent.FLAG_ACTIVITY_NO_ANIMATION
+            );
             startActivity(i);
             overridePendingTransition(0, 0);
-        } catch (Throwable ignored) {
+        } catch (Throwable failure) {
+            openSettingsFallback();
         }
     }
 
@@ -84,7 +91,6 @@ public final class MainActivity extends Activity {
 
         root.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
-
                 case MotionEvent.ACTION_DOWN:
                     downX = event.getX();
                     downY = event.getY();
@@ -92,15 +98,14 @@ public final class MainActivity extends Activity {
 
                 case MotionEvent.ACTION_UP:
                     float dx = event.getX() - downX;
-                    float dy = downY - event.getY();
+                    float upward = downY - event.getY();
 
                     if (
-                        dy >= dp(48)
-                        && dy > Math.abs(dx) * 1.2f
+                        upward >= dp(48)
+                        && upward > Math.abs(dx) * 1.15f
                     ) {
                         openDrawer();
                     }
-
                     return true;
 
                 case MotionEvent.ACTION_CANCEL:
@@ -123,9 +128,6 @@ public final class MainActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
-
-        if (focus) {
-            hideSystemUI();
-        }
+        if (focus) hideSystemUI();
     }
 }
