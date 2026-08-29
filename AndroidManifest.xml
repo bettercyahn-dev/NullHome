@@ -7,6 +7,13 @@
         android:minSdkVersion="26"
         android:targetSdkVersion="35" />
 
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="false"
         android:fullBackupContent="false"
@@ -16,7 +23,6 @@
         android:supportsRtl="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
-        <!-- OHO+ launches this to open Samsung Recents -->
         <activity
             android:name=".RecentsBridgeActivity"
             android:exported="true"
@@ -32,7 +38,6 @@
 
         </activity>
 
-        <!-- Actual HOME -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -43,17 +48,12 @@
 
             <intent-filter android:priority="1000">
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.HOME" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
 
         </activity>
 
-        <!--
-             App drawer runs in a separate process.
-             Closing it allows the entire :drawer process to disappear.
-        -->
         <activity
             android:name=".DrawerActivity"
             android:exported="false"
