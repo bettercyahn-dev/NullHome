@@ -7,6 +7,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -30,7 +31,7 @@ import java.util.List;
 public final class MainActivity extends Activity {
 
     private static final String TAG = "NullHome";
-    private static final String BUILD = "drawer-v3-inline";
+    private static final String BUILD = "drawer-v3.1-clean-scroll";
     private static final String EXTRA_OPEN_DRAWER = "dev.nullhome.OPEN_DRAWER";
 
     private static final class Entry {
@@ -243,11 +244,29 @@ public final class MainActivity extends Activity {
         list.setBackgroundColor(Color.BLACK);
         list.setDivider(null);
         list.setDividerHeight(0);
-        list.setVerticalScrollBarEnabled(false);
-        list.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        list.setCacheColorHint(Color.BLACK);
+
+        /*
+         * Strip every stock ListView visual effect. On the forced
+         * 216x468 / 90dpi software-rendered window, Samsung/Material's
+         * selector + scroll cache can look like a translucent black veil
+         * while dragging. The drawer should draw only black + white text.
+         */
+        list.setSelector(new ColorDrawable(Color.TRANSPARENT));
+        list.setDrawSelectorOnTop(false);
+        list.setScrollingCacheEnabled(false);
+        list.setAnimationCacheEnabled(false);
+        list.setWillNotCacheDrawing(true);
+        list.setVerticalFadingEdgeEnabled(false);
+        list.setHorizontalFadingEdgeEnabled(false);
         list.setFadingEdgeLength(0);
+        list.setVerticalScrollBarEnabled(false);
+        list.setHorizontalScrollBarEnabled(false);
+        list.setSmoothScrollbarEnabled(false);
+        list.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        list.setCacheColorHint(Color.TRANSPARENT);
         list.setChoiceMode(ListView.CHOICE_MODE_NONE);
+        list.setSoundEffectsEnabled(false);
+        list.setHapticFeedbackEnabled(false);
 
         list.setAdapter(new BaseAdapter() {
 
@@ -285,6 +304,8 @@ public final class MainActivity extends Activity {
                     row.setPadding(dp(18), 0, dp(12), 0);
                     row.setMinHeight(dp(50));
                     row.setBackgroundColor(Color.BLACK);
+                    row.setSoundEffectsEnabled(false);
+                    row.setHapticFeedbackEnabled(false);
                 }
 
                 row.setText(apps.get(position).label);
@@ -317,11 +338,6 @@ public final class MainActivity extends Activity {
                     return;
                 }
 
-                /*
-                 * Drawer is not another Activity or process anymore.
-                 * Drop the transient list immediately after Android accepts
-                 * the selected app launch. HOME underneath is black again.
-                 */
                 showBlackHome();
             }
         );
@@ -347,10 +363,6 @@ public final class MainActivity extends Activity {
                 BUILD + " gesture-up dx=" + dx + " dy=" + upward
             );
 
-            /*
-             * Post outside the current MotionEvent dispatch. This avoids
-             * replacing the content hierarchy while Android is traversing it.
-             */
             getWindow().getDecorView().post(this::showDrawer);
         }
     }
@@ -434,10 +446,6 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onStop() {
-        /*
-         * If anything else takes foreground while the drawer is open
-         * (Recents, Settings, another app), discard the transient drawer.
-         */
         if (drawerOpen) {
             showBlackHome();
         }
