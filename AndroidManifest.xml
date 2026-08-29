@@ -59,9 +59,9 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:launchMode="singleTask"
-            android:taskAffinity="dev.nullhome.drawer"
-            android:process=":drawer"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:hardwareAccelerated="true"
             android:theme="@android:style/Theme.Material.NoActionBar" />
 
     </application>
