@@ -3,13 +3,12 @@ package dev.nullhome;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.os.Process;
+import android.provider.Settings;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
@@ -27,6 +26,7 @@ import java.util.List;
 public final class DrawerActivity extends Activity {
 
     private static final String TAG = "NullHomeDrawer";
+    private static final String BUILD = "drawer-v2-same-process";
 
     private static final class Entry {
         final String label;
@@ -39,10 +39,11 @@ public final class DrawerActivity extends Activity {
     }
 
     private final ArrayList<Entry> apps = new ArrayList<>();
-    private float downY;
 
     private int dp(float value) {
-        return (int) (value * getResources().getDisplayMetrics().density + 0.5f);
+        return (int) (
+            value * getResources().getDisplayMetrics().density + 0.5f
+        );
     }
 
     private void hideSystemUI() {
@@ -51,31 +52,49 @@ public final class DrawerActivity extends Activity {
 
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             getWindow().setDecorFitsSystemWindows(false);
+
             WindowInsetsController c = getWindow().getInsetsController();
+
             if (c != null) {
-                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
+                c.hide(
+                    WindowInsets.Type.statusBars()
+                    | WindowInsets.Type.navigationBars()
+                );
+
                 c.setSystemBarsBehavior(
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    WindowInsetsController
+                        .BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
                 );
             }
+        } else {
+            getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+            );
         }
     }
 
-    private void terminateDrawerSoon() {
-        final int pid = Process.myPid();
-        new Handler(Looper.getMainLooper()).postDelayed(
-            () -> Process.killProcess(pid),
-            750
-        );
+    private void closeDrawer() {
+        finish();
+        overridePendingTransition(0, 0);
     }
 
-    private void closeDrawer() {
-        finishAndRemoveTask();
-        terminateDrawerSoon();
+    private void openSettings() {
+        try {
+            Intent i = new Intent(Settings.ACTION_SETTINGS);
+            startActivity(i);
+            closeDrawer();
+        } catch (Throwable t) {
+            Log.e(TAG, "settings fallback failed", t);
+        }
     }
 
     private void showFailure(String text) {
-        Log.e(TAG, text);
+        Log.e(TAG, BUILD + " " + text);
 
         TextView failure = new TextView(this);
         failure.setBackgroundColor(Color.BLACK);
@@ -83,14 +102,20 @@ public final class DrawerActivity extends Activity {
         failure.setTextSize(16);
         failure.setGravity(Gravity.CENTER);
         failure.setPadding(dp(20), dp(20), dp(20), dp(20));
-        failure.setText(text + "\n\nTap to close");
-        failure.setOnClickListener(v -> closeDrawer());
+        failure.setText(
+            text
+            + "\n\nTap to open Settings"
+            + "\nBack to close"
+        );
+        failure.setOnClickListener(v -> openSettings());
+
         setContentView(failure);
     }
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+
         hideSystemUI();
 
         final PackageManager pm = getPackageManager();
@@ -98,15 +123,19 @@ public final class DrawerActivity extends Activity {
         query.addCategory(Intent.CATEGORY_LAUNCHER);
 
         final List<ResolveInfo> resolved;
+
         try {
-            resolved = pm.queryIntentActivities(query, PackageManager.MATCH_ALL);
+            resolved = pm.queryIntentActivities(
+                query,
+                PackageManager.MATCH_ALL
+            );
         } catch (Throwable t) {
-            Log.e(TAG, "query failed", t);
+            Log.e(TAG, BUILD + " query failed", t);
             showFailure("APP QUERY FAILED");
             return;
         }
 
-        if (resolved == null) {
+        if (resolved == null || resolved.isEmpty()) {
             showFailure("NO APP RESULTS");
             return;
         }
@@ -114,31 +143,54 @@ public final class DrawerActivity extends Activity {
         final HashSet<String> seen = new HashSet<>();
 
         for (ResolveInfo ri : resolved) {
-            if (ri == null || ri.activityInfo == null) continue;
+            if (ri == null || ri.activityInfo == null) {
+                continue;
+            }
 
             String pkg = ri.activityInfo.packageName;
             String cls = ri.activityInfo.name;
 
-            if (pkg == null || cls == null) continue;
-            if (getPackageName().equals(pkg)) continue;
-            if (!ri.activityInfo.enabled) continue;
-            if (ri.activityInfo.applicationInfo == null ||
-                !ri.activityInfo.applicationInfo.enabled) continue;
-
-            ComponentName component = new ComponentName(pkg, cls);
-            String flattened = component.flattenToString();
-            if (!seen.add(flattened)) continue;
-
-            CharSequence cs;
-            try {
-                cs = ri.loadLabel(pm);
-            } catch (Throwable ignored) {
-                cs = null;
+            if (pkg == null || cls == null) {
+                continue;
             }
 
-            String label = (cs == null || cs.length() == 0)
+            if (getPackageName().equals(pkg)) {
+                continue;
+            }
+
+            if (!ri.activityInfo.enabled || !ri.activityInfo.exported) {
+                continue;
+            }
+
+            ApplicationInfo appInfo = ri.activityInfo.applicationInfo;
+
+            if (appInfo == null || !appInfo.enabled) {
+                continue;
+            }
+
+            if ((appInfo.flags & ApplicationInfo.FLAG_SUSPENDED) != 0) {
+                continue;
+            }
+
+            ComponentName component = new ComponentName(pkg, cls);
+            String key = component.flattenToString();
+
+            if (!seen.add(key)) {
+                continue;
+            }
+
+            CharSequence loaded;
+
+            try {
+                loaded = ri.loadLabel(pm);
+            } catch (Throwable ignored) {
+                loaded = null;
+            }
+
+            String label =
+                (loaded == null || loaded.length() == 0)
                 ? pkg
-                : cs.toString();
+                : loaded.toString();
 
             apps.add(new Entry(label, component));
         }
@@ -146,7 +198,10 @@ public final class DrawerActivity extends Activity {
         final Collator collator = Collator.getInstance();
         apps.sort((a, b) -> collator.compare(a.label, b.label));
 
-        Log.i(TAG, "apps=" + apps.size());
+        Log.i(
+            TAG,
+            "build=" + BUILD + " apps=" + apps.size()
+        );
 
         if (apps.isEmpty()) {
             showFailure("0 LAUNCHABLE APPS");
@@ -154,6 +209,7 @@ public final class DrawerActivity extends Activity {
         }
 
         final ListView list = new ListView(this);
+
         list.setBackgroundColor(Color.BLACK);
         list.setDivider(null);
         list.setDividerHeight(0);
@@ -161,8 +217,10 @@ public final class DrawerActivity extends Activity {
         list.setOverScrollMode(View.OVER_SCROLL_NEVER);
         list.setCacheColorHint(Color.BLACK);
         list.setFadingEdgeLength(0);
+        list.setChoiceMode(ListView.CHOICE_MODE_NONE);
 
         list.setAdapter(new BaseAdapter() {
+
             @Override
             public int getCount() {
                 return apps.size();
@@ -179,67 +237,68 @@ public final class DrawerActivity extends Activity {
             }
 
             @Override
-            public View getView(int position, View convertView,
-                                android.view.ViewGroup parent) {
+            public View getView(
+                int position,
+                View convertView,
+                android.view.ViewGroup parent
+            ) {
                 TextView row;
+
                 if (convertView instanceof TextView) {
                     row = (TextView) convertView;
                 } else {
                     row = new TextView(DrawerActivity.this);
                     row.setTextColor(Color.WHITE);
-                    row.setTextSize(16);
+                    row.setTextSize(17);
                     row.setGravity(Gravity.CENTER_VERTICAL);
                     row.setSingleLine(true);
                     row.setPadding(dp(18), 0, dp(12), 0);
-                    row.setMinHeight(dp(48));
+                    row.setMinHeight(dp(50));
                     row.setBackgroundColor(Color.BLACK);
                 }
+
                 row.setText(apps.get(position).label);
                 return row;
             }
         });
 
-        list.setOnItemClickListener((parent, view, position, id) -> {
-            Entry entry = apps.get(position);
+        list.setOnItemClickListener(
+            (parent, view, position, id) -> {
+                Entry entry = apps.get(position);
 
-            Intent launch = new Intent(Intent.ACTION_MAIN);
-            launch.addCategory(Intent.CATEGORY_LAUNCHER);
-            launch.setComponent(entry.component);
-            launch.addFlags(
-                Intent.FLAG_ACTIVITY_NEW_TASK |
-                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED |
-                Intent.FLAG_ACTIVITY_NO_ANIMATION
-            );
+                /*
+                 * makeMainActivity() produces the normal launcher-style
+                 * MAIN/LAUNCHER task flags for the exact component.
+                 */
+                Intent launch = Intent.makeMainActivity(entry.component);
+                launch.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
 
-            try {
-                startActivity(launch);
-            } catch (Throwable t) {
-                Log.e(TAG, "launch failed: " + entry.component, t);
-                if (view instanceof TextView) {
-                    ((TextView) view).setText("Launch failed — press Back");
-                }
-                return;
-            }
+                try {
+                    startActivity(launch);
+                    overridePendingTransition(0, 0);
+                } catch (Throwable t) {
+                    Log.e(
+                        TAG,
+                        BUILD + " launch failed: "
+                        + entry.component.flattenToShortString(),
+                        t
+                    );
 
-            finishAndRemoveTask();
-            terminateDrawerSoon();
-        });
-
-        list.setOnTouchListener((v, event) -> {
-            switch (event.getActionMasked()) {
-                case android.view.MotionEvent.ACTION_DOWN:
-                    downY = event.getY();
-                    break;
-                case android.view.MotionEvent.ACTION_UP:
-                    float down = event.getY() - downY;
-                    if (list.getFirstVisiblePosition() == 0 && down >= dp(72)) {
-                        closeDrawer();
-                        return true;
+                    if (view instanceof TextView) {
+                        ((TextView) view).setText(
+                            "Launch failed: " + entry.label
+                        );
                     }
-                    break;
+                    return;
+                }
+
+                /*
+                 * Close the drawer Activity immediately after Android accepts
+                 * the target launch. No process kill, no race, no extra task.
+                 */
+                closeDrawer();
             }
-            return false;
-        });
+        );
 
         setContentView(list);
     }
@@ -253,7 +312,16 @@ public final class DrawerActivity extends Activity {
     @Override
     public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
-        if (focus) hideSystemUI();
+
+        if (focus) {
+            hideSystemUI();
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        apps.clear();
+        super.onDestroy();
     }
 
     @Override
