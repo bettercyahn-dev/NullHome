@@ -16,6 +16,7 @@
         android:supportsRtl="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
 
+        <!-- OHO+ launches this to open Samsung Recents -->
         <activity
             android:name=".RecentsBridgeActivity"
             android:exported="true"
@@ -31,6 +32,7 @@
 
         </activity>
 
+        <!-- Actual HOME -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -47,6 +49,20 @@
             </intent-filter>
 
         </activity>
+
+        <!--
+             App drawer runs in a separate process.
+             Closing it allows the entire :drawer process to disappear.
+        -->
+        <activity
+            android:name=".DrawerActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="dev.nullhome.drawer"
+            android:process=":drawer"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
 
     </application>
 

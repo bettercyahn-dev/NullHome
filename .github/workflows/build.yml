@@ -39,8 +39,7 @@ jobs:
             -target 8 \
             -classpath "$ANDROID_HOME/platforms/android-35/android.jar" \
             -d build/classes \
-            app/src/main/java/dev/nullhome/MainActivity.java \
-            app/src/main/java/dev/nullhome/RecentsBridgeActivity.java
+            app/src/main/java/dev/nullhome/*.java
 
       - name: DEX
         run: |
@@ -48,8 +47,7 @@ jobs:
             --release \
             --min-api 26 \
             --output build/dex \
-            build/classes/dev/nullhome/MainActivity.class \
-            build/classes/dev/nullhome/RecentsBridgeActivity.class
+            build/classes/dev/nullhome/*.class
 
       - name: Create APK
         run: |

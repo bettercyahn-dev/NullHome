@@ -1,10 +1,10 @@
 package dev.nullhome;
 
 import android.app.Activity;
-import android.content.ComponentName;
 import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
@@ -13,7 +13,14 @@ import android.view.WindowManager;
 
 public final class MainActivity extends Activity {
 
-    private View root;
+    private float downX;
+    private float downY;
+
+    private int dp(float value) {
+        return (int) (
+            value * getResources().getDisplayMetrics().density + 0.5f
+        );
+    }
 
     private void hideSystemUI() {
         final Window w = getWindow();
@@ -49,23 +56,17 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void launchCanary() {
-        Intent i = new Intent(Intent.ACTION_MAIN);
-
-        i.setComponent(
-            new ComponentName(
-                "com.chrome.canary",
-                "com.google.android.apps.chrome.Main"
-            )
-        );
+    private void openDrawer() {
+        Intent i = new Intent(this, DrawerActivity.class);
 
         i.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK
-            | Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            | Intent.FLAG_ACTIVITY_NO_ANIMATION
         );
 
         try {
             startActivity(i);
+            overridePendingTransition(0, 0);
         } catch (Throwable ignored) {
         }
     }
@@ -78,17 +79,38 @@ public final class MainActivity extends Activity {
             WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         );
 
-        root = new View(this);
-
-        // AMOLED black.
+        View root = new View(this);
         root.setBackgroundColor(Color.BLACK);
 
-        // No launcher database or app enumeration:
-        // tap HOME surface -> Canary.
-        root.setOnClickListener(v -> launchCanary());
+        root.setOnTouchListener((v, event) -> {
+            switch (event.getActionMasked()) {
+
+                case MotionEvent.ACTION_DOWN:
+                    downX = event.getX();
+                    downY = event.getY();
+                    return true;
+
+                case MotionEvent.ACTION_UP:
+                    float dx = event.getX() - downX;
+                    float dy = downY - event.getY();
+
+                    if (
+                        dy >= dp(48)
+                        && dy > Math.abs(dx) * 1.2f
+                    ) {
+                        openDrawer();
+                    }
+
+                    return true;
+
+                case MotionEvent.ACTION_CANCEL:
+                    return true;
+            }
+
+            return true;
+        });
 
         setContentView(root);
-
         hideSystemUI();
     }
 
