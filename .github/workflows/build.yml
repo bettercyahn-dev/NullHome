@@ -49,7 +49,7 @@ jobs:
             --output build/dex \
             build/classes/dev/nullhome/*.class
 
-      - name: Create APK
+      - name: Create NullHome APK
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/aapt2" link \
             -o build/base.apk \
@@ -62,7 +62,7 @@ jobs:
           zip -q -j ../base.apk classes.dex
           cd ../..
 
-      - name: Align
+      - name: Align NullHome
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/zipalign" \
             -f \
@@ -84,7 +84,7 @@ jobs:
             -validity 10000 \
             -dname "CN=NullHome"
 
-      - name: Sign
+      - name: Sign NullHome
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
             --ks build/nullhome.keystore \
@@ -98,15 +98,62 @@ jobs:
             --verbose \
             build/NullHome.apk
 
+      - name: Build ZeroCut RRO
+        run: |
+          mkdir -p build/zerocut/compiled
+
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" compile \
+            --dir zerocut/res \
+            -o build/zerocut/compiled/resources.zip
+
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" link \
+            -o build/zerocut/unsigned.apk \
+            -I "$ANDROID_HOME/platforms/android-35/android.jar" \
+            --manifest zerocut/AndroidManifest.xml \
+            --auto-add-overlay \
+            --min-sdk-version 29 \
+            --target-sdk-version 35 \
+            build/zerocut/compiled/resources.zip
+
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" \
+            -f \
+            -p \
+            4 \
+            build/zerocut/unsigned.apk \
+            build/zerocut/aligned.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" sign \
+            --ks build/nullhome.keystore \
+            --ks-pass pass:nullhome \
+            --key-pass pass:nullhome \
+            --out build/ZeroCut.apk \
+            build/zerocut/aligned.apk
+
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
+            verify \
+            --verbose \
+            build/ZeroCut.apk
+
       - name: Information
         run: |
-          ls -lh build/NullHome.apk
+          ls -lh build/NullHome.apk build/ZeroCut.apk
 
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
             build/NullHome.apk | head -20
 
-      - name: Upload APK
+          echo "----- ZeroCut -----"
+
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging \
+            build/ZeroCut.apk | head -20
+
+      - name: Upload NullHome APK
         uses: actions/upload-artifact@v4
         with:
           name: NullHome
           path: build/NullHome.apk
+
+      - name: Upload ZeroCut RRO
+        uses: actions/upload-artifact@v4
+        with:
+          name: ZeroCut
+          path: build/ZeroCut.apk
