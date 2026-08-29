@@ -1,21 +1,57 @@
 package dev.nullhome;
 
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.util.Log;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.widget.BaseAdapter;
+import android.widget.ListView;
+import android.widget.TextView;
+
+import java.text.Collator;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
 
 public final class MainActivity extends Activity {
 
+    private static final String TAG = "NullHome";
+    private static final String BUILD = "drawer-v3-inline";
+    private static final String EXTRA_OPEN_DRAWER = "dev.nullhome.OPEN_DRAWER";
+
+    private static final class Entry {
+        final String label;
+        final ComponentName component;
+
+        Entry(String label, ComponentName component) {
+            this.label = label;
+            this.component = component;
+        }
+    }
+
+    private final ArrayList<Entry> apps = new ArrayList<>();
+
     private float downX;
     private float downY;
+    private boolean trackingGesture;
+    private boolean gestureTriggered;
+    private boolean drawerOpen;
+
+    private View blackView;
 
     private int dp(float value) {
         return (int) (
@@ -31,6 +67,7 @@ public final class MainActivity extends Activity {
 
         if (android.os.Build.VERSION.SDK_INT >= 30) {
             w.setDecorFitsSystemWindows(false);
+
             WindowInsetsController c = w.getInsetsController();
 
             if (c != null) {
@@ -56,6 +93,19 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void showBlackHome() {
+        drawerOpen = false;
+        apps.clear();
+
+        if (blackView == null) {
+            blackView = new View(this);
+            blackView.setBackgroundColor(Color.BLACK);
+        }
+
+        setContentView(blackView);
+        hideSystemUI();
+    }
+
     private void openSettingsFallback() {
         try {
             Intent settings = new Intent(Settings.ACTION_SETTINGS);
@@ -64,20 +114,253 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void openDrawer() {
+    private void showFailure(String text) {
+        drawerOpen = true;
+
+        TextView failure = new TextView(this);
+        failure.setBackgroundColor(Color.BLACK);
+        failure.setTextColor(Color.WHITE);
+        failure.setTextSize(16);
+        failure.setGravity(Gravity.CENTER);
+        failure.setPadding(dp(20), dp(20), dp(20), dp(20));
+        failure.setText(
+            text
+            + "\n\nTap to open Settings"
+            + "\nBack to return home"
+        );
+
+        failure.setOnClickListener(v -> openSettingsFallback());
+
+        setContentView(failure);
+        hideSystemUI();
+    }
+
+    private void showDrawer() {
+        if (drawerOpen) {
+            return;
+        }
+
+        drawerOpen = true;
+        apps.clear();
+
+        final PackageManager pm = getPackageManager();
+        final Intent query = new Intent(Intent.ACTION_MAIN);
+        query.addCategory(Intent.CATEGORY_LAUNCHER);
+
+        final List<ResolveInfo> resolved;
+
         try {
-            Intent i = new Intent(this, DrawerActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            resolved = pm.queryIntentActivities(
+                query,
+                PackageManager.MATCH_ALL
+            );
+        } catch (Throwable t) {
+            Log.e(TAG, BUILD + " app query failed", t);
+            showFailure("APP QUERY FAILED");
+            return;
+        }
+
+        if (resolved == null || resolved.isEmpty()) {
+            Log.e(TAG, BUILD + " no app results");
+            showFailure("NO LAUNCHABLE APPS FOUND");
+            return;
+        }
+
+        final HashSet<String> seen = new HashSet<>();
+
+        for (ResolveInfo ri : resolved) {
+            if (ri == null || ri.activityInfo == null) {
+                continue;
+            }
+
+            String pkg = ri.activityInfo.packageName;
+            String cls = ri.activityInfo.name;
+
+            if (pkg == null || cls == null) {
+                continue;
+            }
+
+            if (getPackageName().equals(pkg)) {
+                continue;
+            }
+
+            if (!ri.activityInfo.enabled || !ri.activityInfo.exported) {
+                continue;
+            }
+
+            ApplicationInfo appInfo = ri.activityInfo.applicationInfo;
+
+            if (appInfo == null || !appInfo.enabled) {
+                continue;
+            }
+
+            if ((appInfo.flags & ApplicationInfo.FLAG_SUSPENDED) != 0) {
+                continue;
+            }
+
+            ComponentName component = new ComponentName(pkg, cls);
+            String key = component.flattenToString();
+
+            if (!seen.add(key)) {
+                continue;
+            }
+
+            CharSequence loaded;
+
+            try {
+                loaded = ri.loadLabel(pm);
+            } catch (Throwable ignored) {
+                loaded = null;
+            }
+
+            String label =
+                (loaded == null || loaded.length() == 0)
+                ? pkg
+                : loaded.toString();
+
+            apps.add(new Entry(label, component));
+        }
+
+        final Collator collator = Collator.getInstance();
+
+        Collections.sort(
+            apps,
+            (a, b) -> collator.compare(a.label, b.label)
+        );
+
+        Log.i(
+            TAG,
+            "build=" + BUILD + " apps=" + apps.size()
+        );
+
+        if (apps.isEmpty()) {
+            showFailure("0 LAUNCHABLE APPS");
+            return;
+        }
+
+        final ListView list = new ListView(this);
+
+        list.setBackgroundColor(Color.BLACK);
+        list.setDivider(null);
+        list.setDividerHeight(0);
+        list.setVerticalScrollBarEnabled(false);
+        list.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        list.setCacheColorHint(Color.BLACK);
+        list.setFadingEdgeLength(0);
+        list.setChoiceMode(ListView.CHOICE_MODE_NONE);
+
+        list.setAdapter(new BaseAdapter() {
+
+            @Override
+            public int getCount() {
+                return apps.size();
+            }
+
+            @Override
+            public Entry getItem(int position) {
+                return apps.get(position);
+            }
+
+            @Override
+            public long getItemId(int position) {
+                return position;
+            }
+
+            @Override
+            public View getView(
+                    int position,
+                    View convertView,
+                    android.view.ViewGroup parent) {
+
+                TextView row;
+
+                if (convertView instanceof TextView) {
+                    row = (TextView) convertView;
+                } else {
+                    row = new TextView(MainActivity.this);
+                    row.setTextColor(Color.WHITE);
+                    row.setTextSize(17);
+                    row.setGravity(Gravity.CENTER_VERTICAL);
+                    row.setSingleLine(true);
+                    row.setPadding(dp(18), 0, dp(12), 0);
+                    row.setMinHeight(dp(50));
+                    row.setBackgroundColor(Color.BLACK);
+                }
+
+                row.setText(apps.get(position).label);
+                return row;
+            }
+        });
+
+        list.setOnItemClickListener(
+            (parent, view, position, id) -> {
+                Entry entry = apps.get(position);
+                Intent launch = Intent.makeMainActivity(entry.component);
+                launch.addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION);
+
+                try {
+                    startActivity(launch);
+                    overridePendingTransition(0, 0);
+                } catch (Throwable t) {
+                    Log.e(
+                        TAG,
+                        BUILD + " launch failed: "
+                        + entry.component.flattenToShortString(),
+                        t
+                    );
+
+                    if (view instanceof TextView) {
+                        ((TextView) view).setText(
+                            "Launch failed: " + entry.label
+                        );
+                    }
+                    return;
+                }
+
+                /*
+                 * Drawer is not another Activity or process anymore.
+                 * Drop the transient list immediately after Android accepts
+                 * the selected app launch. HOME underneath is black again.
+                 */
+                showBlackHome();
+            }
+        );
+
+        setContentView(list);
+        hideSystemUI();
+    }
+
+    private void triggerDrawerFromGesture(float x, float y) {
+        float dx = x - downX;
+        float upward = downY - y;
+
+        if (
+            !gestureTriggered
+            && upward >= dp(32)
+            && upward > Math.abs(dx) * 1.10f
+        ) {
+            gestureTriggered = true;
+            trackingGesture = false;
+
+            Log.i(
+                TAG,
+                BUILD + " gesture-up dx=" + dx + " dy=" + upward
+            );
 
             /*
-             * Keep DrawerActivity in the same HOME task.
-             * This avoids the previous extra-task/process lifecycle race.
+             * Post outside the current MotionEvent dispatch. This avoids
+             * replacing the content hierarchy while Android is traversing it.
              */
-            startActivity(i);
-            overridePendingTransition(0, 0);
+            getWindow().getDecorView().post(this::showDrawer);
+        }
+    }
 
-        } catch (Throwable failure) {
-            openSettingsFallback();
+    private void handleTestIntent(Intent intent) {
+        if (
+            intent != null
+            && intent.getBooleanExtra(EXTRA_OPEN_DRAWER, false)
+        ) {
+            getWindow().getDecorView().post(this::showDrawer);
         }
     }
 
@@ -89,40 +372,58 @@ public final class MainActivity extends Activity {
             WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS
         );
 
-        View root = new View(this);
-        root.setBackgroundColor(Color.BLACK);
+        showBlackHome();
+        handleTestIntent(getIntent());
+    }
 
-        root.setOnTouchListener((v, event) -> {
-            switch (event.getActionMasked()) {
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        showBlackHome();
+        handleTestIntent(intent);
+    }
 
-                case MotionEvent.ACTION_DOWN:
-                    downX = event.getX();
-                    downY = event.getY();
-                    return true;
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent event) {
+        if (drawerOpen) {
+            return super.dispatchTouchEvent(event);
+        }
 
-                case MotionEvent.ACTION_UP: {
-                    float dx = event.getX() - downX;
-                    float upward = downY - event.getY();
+        switch (event.getActionMasked()) {
 
-                    if (
-                        upward >= dp(48)
-                        && upward > Math.abs(dx) * 1.15f
-                    ) {
-                        openDrawer();
-                    }
+            case MotionEvent.ACTION_DOWN:
+                downX = event.getX();
+                downY = event.getY();
+                trackingGesture = true;
+                gestureTriggered = false;
+                return true;
 
-                    return true;
+            case MotionEvent.ACTION_MOVE:
+                if (trackingGesture) {
+                    triggerDrawerFromGesture(
+                        event.getX(),
+                        event.getY()
+                    );
                 }
+                return true;
 
-                case MotionEvent.ACTION_CANCEL:
-                    return true;
-            }
+            case MotionEvent.ACTION_UP:
+                if (trackingGesture) {
+                    triggerDrawerFromGesture(
+                        event.getX(),
+                        event.getY()
+                    );
+                }
+                trackingGesture = false;
+                return true;
 
-            return true;
-        });
+            case MotionEvent.ACTION_CANCEL:
+                trackingGesture = false;
+                return true;
+        }
 
-        setContentView(root);
-        hideSystemUI();
+        return true;
     }
 
     @Override
@@ -132,11 +433,31 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        /*
+         * If anything else takes foreground while the drawer is open
+         * (Recents, Settings, another app), discard the transient drawer.
+         */
+        if (drawerOpen) {
+            showBlackHome();
+        }
+
+        super.onStop();
+    }
+
+    @Override
     public void onWindowFocusChanged(boolean focus) {
         super.onWindowFocusChanged(focus);
 
         if (focus) {
             hideSystemUI();
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        if (drawerOpen) {
+            showBlackHome();
         }
     }
 }
