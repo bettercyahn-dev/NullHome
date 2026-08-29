@@ -1,20 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="dev.nullhome.zerocut"
-    android:versionCode="1"
-    android:versionName="1.0">
+    android:versionCode="2"
+    android:versionName="2.0-probe">
 
     <uses-sdk
         android:minSdkVersion="29"
         android:targetSdkVersion="35" />
 
+    <!--
+      Non-preloaded RROs targeting framework-res must provide a targetName
+      when they are not signed with the platform certificate.  This probe
+      intentionally uses a sentinel name so PackageManager will admit the
+      APK and idmap2/OverlayManager can report the real overlayable name or
+      policy restriction on the Samsung framework.
+    -->
     <overlay
         android:targetPackage="android"
+        android:targetName="NullHomeProbe"
         android:category="com.android.internal.display_cutout_emulation"
         android:priority="999" />
 
     <application
         android:hasCode="false"
-        android:label="NullHome Zero Cut" />
+        android:label="NullHome Zero Cut Probe" />
 
 </manifest>
